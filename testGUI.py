@@ -1,0 +1,5 @@
+f = open("test.mvc", "w")
+f.write("test\n")
+f.close()
+f = open("test.mvc").read()
+print(f)

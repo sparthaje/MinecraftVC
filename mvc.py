@@ -1,10 +1,12 @@
 # Written by Shreepa Parthaje
 
 import tkinter as tk
-from tkinter import font
 from tkinter import *
 
 import sys
+
+from dropbox import DropboxOAuth2FlowNoRedirect
+from dropbox import Dropbox
 
 # Nice GUI (done)
 # Upload / download from dropbox (normal files)
@@ -26,6 +28,42 @@ oauth stuff needs to be sorted out
 
 ROOT, CONSOLE, ENTRY = 0, 1, 2
 FONT = ("inconsolata", 12, "normal")
+APP_TOKEN = ''
+APP_KEY = open("secret.txt", "r").read().split()[0]
+APP_SECRET = open("secret.txt", "r").read().split()[1]
+
+def login(gui):
+	auth_flow = DropboxOAuth2FlowNoRedirect(APP_KEY, APP_SECRET)
+
+	authorize_url = auth_flow.start()
+	print(authorize_url)
+	auth_code = input("Enter the authorization code here: ").strip()
+
+	try:
+	    oauth_result = auth_flow.finish(auth_code)
+	except:
+	    return "Error: {0}".format(1)
+
+	dbx = Dropbox(oauth_result.access_token)
+	return "Logged In"
+
+def println(item, gui):
+	console = gui[CONSOLE]
+	console.config(state=NORMAL)
+
+	if console.get(1.0, END) == "\n":
+		console.insert(END, item)
+	else:
+		console.insert(END, "\n" + item)
+
+	console.see(END)
+	console.config(state=DISABLED)
+
+def get_console(gui):
+	entry = gui[ENTRY]
+	log = entry.get()
+	entry.delete(0, END)
+	return log
 
 def parse_command(command, gui):
 	params = command.split(" ")
@@ -39,7 +77,7 @@ def parse_command(command, gui):
 	elif (fp == "/pull" or fp == "pull"):
 		return "pull"
 	elif (fp == "/login" or fp == "login"):
-		return "Logged In"
+		return login(gui)
 	elif (fp == "/quit" or fp == "quit"):
 		sys.exit(0)
 	elif (fp == "/help" or fp == "help"):
@@ -53,22 +91,9 @@ def parse_command(command, gui):
 		return "'{0}' is not a valid command, type /help for help".format(command)
 
 def get_command(event, gui):
-	entry = gui[ENTRY]
-	console = gui[CONSOLE]
-
-	log = parse_command(entry.get(), gui)
-	entry.delete(0, END)
-
-	console.config(state=NORMAL)
-
-	if console.get(1.0, END) == "\n":
-		console.insert(END, log)
-	else:
-		console.insert(END, "\n" + log)
-
-	console.see(END)
-	console.config(state=DISABLED)
-
+	command = get_console(gui)
+	log = parse_command(command, gui)
+	println(log, gui)
 
 def create_GUI():
 	gui = []

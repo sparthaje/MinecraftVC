@@ -1,41 +1,158 @@
 # Written by Shreepa Parthaje
 
+import sys
+
+import webbrowser
+
+import pickle
+
+from os import path, listdir, remove
+
+from shutil import make_archive
+
 import tkinter as tk
 from tkinter import *
 from tkinter import simpledialog
-
-import sys
-import webbrowser
+from tkinter import filedialog
 
 from dropbox import DropboxOAuth2FlowNoRedirect
 from dropbox import Dropbox
+from dropbox import files
 
-# Nice GUI (done)
-# Upload / download from dropbox (normal files)
-# Create zips of folders + unzip when arriving at locations
-# settings to change directories
-# account login system
-# make a nice README.md and change README.txt into a string variable
-# deploy and test on windows + macs
-# test with friends
-
-""""
-GUI IDEAS / BUGS
-add icon
-have keyword with specific colors
-
-DROPBOX STUFF
-oauth stuff needs to be sorted out
-"""
-
+# ------------- CONSTANTS -------------
 ROOT, CONSOLE, ENTRY = 0, 1, 2
-FONT = ("inconsolata", 12, "normal")
-APP_TOKEN = ''
 APP_KEY = open("secret.txt", "r").read().split()[0]
 APP_SECRET = open("secret.txt", "r").read().split()[1]
+CHUNK_SIZE = 4 * 1024 * 1024
+
+# ------------- GLOBALS -------------
+settings = {}
 
 
-def login(gui):
+def push_to_dropbox(branch_name, symbol, gui):
+    global settings  # Read
+
+    saves_path = settings["SAVES_DIR"]
+    temp_dir = settings["TEMP_DIR"]
+
+    if settings["OAUTH"] == 'null':
+        return "Please type in /login to use this app"
+
+    # clear temp_dir
+    for path_temp in listdir(temp_dir):
+        remove(path.join(temp_dir, path_temp))
+
+    # archive worlds starting with 'symbol' to temp_dir
+    for path_save in listdir(saves_path):
+        file_path = path.join(saves_path, path_save)
+        if path.isdir(file_path) and path_save[0] == symbol:
+            make_archive(path.join(temp_dir, path_save), 'zip', file_path)
+
+    dbx = Dropbox(settings["OAUTH"].access_token)
+
+    # clear branch_directory in dropbox
+    try:
+        confirm = simpledialog.askstring("Confirm",
+                                         "Type in 'YES' if you wish to proceed. This will delete the current '{0}'"
+                                         " branch if it already exists in dropbox".format(branch_name))
+        if not confirm == "YES":
+            return "Action Not "
+        dbx.files_delete("/" + branch_name)
+    except Exception:
+        pass
+
+    println(
+        "If you have any large worlds, this process will take some time. Please wait until the console prints 'done'"
+        "to close the app", gui)
+
+    # upload every zip file to dropbox in temp_dir
+    for path_temp in listdir(temp_dir):
+        zip_file = path.join(temp_dir, path_temp)
+        destination = "/" + branch_name + "/" + path_temp
+        with open(zip_file, "rb") as f:
+            file_size = path.getsize(zip_file)
+            if file_size < CHUNK_SIZE:
+                dbx.files_upload(f.read(), destination)
+            else:
+                # upload_session_start_result
+                upload_ssr = dbx.files_upload_session_start(f.read(CHUNK_SIZE))
+
+                cursor = files.UploadSessionCursor(session_id=upload_ssr.session_id, offset=f.tell())
+                commit = files.CommitInfo(path=destination)
+
+                while f.tell() < file_size:
+                    percent = str(f.tell() / file_size * 100) + "%"
+                    print(percent)
+
+                    if (file_size - f.tell()) <= CHUNK_SIZE:
+                        dbx.files_upload_session_finish(f.read(CHUNK_SIZE), cursor, commit)
+                    else:
+                        dbx.files_upload_session_append(f.read(CHUNK_SIZE), cursor.session_id, cursor.offset)
+                        cursor.offset = f.tell()
+
+    # clear temp_dir
+    for path_temp in listdir(temp_dir):
+        remove(path.join(temp_dir, path_temp))
+
+    return "done"
+
+
+def edit_settings():
+    global settings  # Read and Write
+
+    # FONT
+    family = simpledialog.askstring("Font Family (currently: " + str(settings["FONT"][0]) + ")", "Type in pass to not "
+                                                                                                 "change this value")
+    if family == "pass":
+        family = settings["FONT"][0]
+
+    size = simpledialog.askstring("Font Size (currently: " + str(settings["FONT"][1]) + ")", "Type in pass to not "
+                                                                                             "change this value")
+    try:
+        size = int(size)
+    except ValueError:
+        size = settings["FONT"][1]
+
+    settings["FONT"] = (family, size, "normal")
+
+    # BG_COLOR and TEXT_COLOR
+    for key in ("BG_COLOR", "TEXT_COLOR", "SYMBOL"):
+        color = simpledialog.askstring("{0} (currently: ".format(key) + str(settings[key]) + ")",
+                                       "Type in pass to not "
+                                       "change this value")
+        if color == "pass":
+            color = settings[key]
+
+        settings[key] = color
+
+    # BACKUP_DIR and SAVES_DIR
+
+    for key in ("BACKUP_DIR", "SAVES_DIR", "TEMP_DIR"):
+        backup_dir = str(filedialog.askdirectory(
+            title="Choose {0}, Click cancel to keep previous {0} (".format(key) + settings[key] + ")"))
+        if not (backup_dir == "" or backup_dir == "()"):
+            settings[key] = backup_dir
+
+    save(settings)
+
+
+def view_settings(gui):
+    global settings  # Read
+
+    for key in settings:
+        if key == "OAUTH":
+            pass
+        elif key == "FONT":
+            s = key + ": " + str(settings[key][0]) + ", " + str(settings[key][1])
+            println(s, gui)
+        else:
+            s = key + ": " + str(settings[key])
+            println(s, gui)
+
+
+def login():
+    global settings  # Writes
+
     auth_flow = DropboxOAuth2FlowNoRedirect(APP_KEY, APP_SECRET)
 
     authorize_url = auth_flow.start()
@@ -43,15 +160,66 @@ def login(gui):
     auth_code = simpledialog.askstring("Log Into MinecraftVC",
                                        "Please log into dropbox in the link opened, authorize this app, and paste the "
                                        "code into the text field to log into MinecraftVC.").strip()
-    # input("Enter the authorization code here: ").strip()
 
     try:
         oauth_result = auth_flow.finish(auth_code)
     except:
-        return "Error: {0}".format(1)
+        return "Error logging in, are you sure you typed in the code correctly?"
 
-    dbx = Dropbox(oauth_result.access_token)
+    settings["OAUTH"] = oauth_result
     return "Logged In"
+
+
+def parse_command(command, gui):
+    global settings  # Read
+
+    params = command.split(" ")
+    fp = params[0]  # first parameter
+    if (fp == "/settings" or fp == "settings") and len(params) == 2:
+        if params[1] == "view":
+            view_settings(gui)
+            return ""
+        elif params[1] == "edit":
+            edit_settings()
+            return "To see any visual changes, please restart the app"
+
+    elif fp == "/backup" or fp == "backup":
+        return "backup"
+
+    elif fp == "/push" or fp == "push":
+        if len(params) == 1:
+            return push_to_dropbox("main", settings["SYMBOL"], gui)
+        if len(params) == 2:
+            return push_to_dropbox(params[1], settings["SYMBOL"], gui)
+        if len(params) == 3:
+            return push_to_dropbox(params[1], params[2], gui)
+
+    elif fp == "/pull" or fp == "pull":
+        return "pull"
+
+    elif fp == "/login" or fp == "login":
+        if not settings["OAUTH"] == 'null':
+            return "Already Logged In"
+        return login()
+
+    elif fp == "/logout" or fp == "logout":
+        settings["OAUTH"] = "null"
+        return "You have been logged out, use /login to log back in"
+
+    elif fp == "/quit" or fp == "quit":
+        save(settings)
+        sys.exit(0)
+
+    elif fp == "/help" or fp == "help":
+        return open("README.txt").read()
+    elif fp == "/clear" or fp == "clear":
+        gui[CONSOLE].config(state=NORMAL)
+        gui[CONSOLE].delete(1.0, END)
+        gui[CONSOLE].config(state=DISABLED)
+        return ""
+
+    else:
+        return "'{0}' is not a valid command, type /help for help".format(command)
 
 
 def println(item, gui):
@@ -74,39 +242,19 @@ def get_console(gui):
     return log
 
 
-def parse_command(command, gui):
-    params = command.split(" ")
-    fp = params[0]  # first parameter
-    if fp == "/settings":
-        return "settings"
-    elif fp == "/backup" or fp == "backup":
-        return "backup"
-    elif fp == "/push" or fp == "push":
-        return "push"
-    elif fp == "/pull" or fp == "pull":
-        return "pull"
-    elif fp == "/login" or fp == "login":
-        return login(gui)
-    elif fp == "/quit" or fp == "quit":
-        sys.exit(0)
-    elif fp == "/help" or fp == "help":
-        return open("README.txt").read()
-    elif fp == "/clear" or fp == "clear":
-        gui[CONSOLE].config(state=NORMAL)
-        gui[CONSOLE].delete(1.0, END)
-        gui[CONSOLE].config(state=DISABLED)
-        return ""
-    else:
-        return "'{0}' is not a valid command, type /help for help".format(command)
-
-
-def get_command(event, gui):
+def get_command(gui):
     command = get_console(gui)
     log = parse_command(command, gui)
     println(log, gui)
 
 
 def create_GUI():
+    global settings  # Read
+
+    bg_color = settings["BG_COLOR"]
+    txt_color = settings["TEXT_COLOR"]
+    font = settings["FONT"]
+
     gui = []
     root = tk.Tk()
     root.minsize(1200, 300)
@@ -114,14 +262,14 @@ def create_GUI():
     root.title("MinecraftVC")
     root.configure(background='black')
 
-    console = Text(root, width=126, height=17, bd=0, highlightthickness=0, relief='ridge', bg='black',
-                   foreground='white', font=FONT)
+    console = Text(root, width=126, height=17, bd=0, highlightthickness=0, relief='ridge', bg=bg_color,
+                   foreground=txt_color, font=font)
     console.pack()
-    console.insert(END, "Welcome to MinecraftVC, type in /help to learn the commands")
+    console.insert(END, "Welcome to MinecraftVC")
     console.config(state=DISABLED)
 
-    entry = Entry(root, width=126, bd=0, highlightthickness=0, relief='ridge', bg='black', foreground='white',
-                  insertbackground='white', font=FONT)
+    entry = Entry(root, width=126, bd=0, highlightthickness=0, relief='ridge', bg=bg_color, foreground=txt_color,
+                  insertbackground=txt_color, font=font)
     entry.focus()
     entry.pack()
 
@@ -129,13 +277,54 @@ def create_GUI():
     gui.append(console)
     gui.append(entry)
 
+    if settings["BACKUP_DIR"] == "null":
+        println("Please type in /settings edit to setup MinecraftVC", gui)
+        println("For help setting up MinecraftVC type in /help setup", gui)
+        println("For general help type in /help", gui)
+
     return gui
 
 
+def save(s):
+    f = open("mvc.settings", "wb")
+    try:
+        pickle.dump(s, f)
+        f.close()
+    except TypeError:
+        print("Saving settings has failed")
+        f.close()
+
+
+def reload():
+    try:
+        f = open("mvc.settings", "rb")
+        s = pickle.load(f)
+        f.close()
+        return s
+    except (IOError, EOFError) as e:
+        s = {
+            "FONT": ("Courier", 12, "normal"),
+            "BG_COLOR": 'black',
+            "TEXT_COLOR": 'white',
+            "BACKUP_DIR": "null",
+            "SAVES_DIR": "null",
+            "TEMP_DIR": "null",
+            "SYMBOL": "*",
+            "OAUTH": "null"
+        }
+        save(s)
+        return s
+
+
 def main():
+    global settings  # Writes
+
+    settings = reload()
+    print(settings)
     gui_elements = create_GUI()
-    gui_elements[ROOT].bind("<Return>", lambda event: get_command(event, gui_elements))
+    gui_elements[ROOT].bind("<Return>", lambda event: get_command(gui_elements))
     gui_elements[ROOT].mainloop()
+    save(settings)
 
 
 if __name__ == "__main__":

@@ -8,7 +8,11 @@ import pickle
 
 from os import path, listdir, remove
 
-from shutil import make_archive
+from shutil import make_archive, rmtree
+
+import zipfile
+
+import datetime
 
 import tkinter as tk
 from tkinter import *
@@ -29,6 +33,77 @@ CHUNK_SIZE = 4 * 1024 * 1024
 settings = {}
 
 
+def local_backup(branch_name, gui):
+    global settings  # Read
+
+    backup_dir = settings["BACKUP_DIR"]
+    saves_path = settings["SAVES_DIR"]
+
+    now = datetime.datetime.now()
+    month = now.month
+    day = now.day
+    year = now.year
+    hour = now.hour
+    minute = now.minute
+
+    backup_name = str(month) + " " + str(day) + " " + str(year) + " | " + str(hour) + ":" + str(minute) + " |"
+
+    base = path.join(backup_dir, branch_name)
+
+    make_archive(path.join(base, "{0} saves".format(backup_name)), 'zip', saves_path)
+
+
+def pull_from_dropbox(branch_name, symbol, gui):
+    global settings  # Read
+
+    confirm = simpledialog.askstring("Confirm",
+                                     "Type in 'YES' if you wish to proceed. This will override existing worlds"
+                                     " if a conflict is found")
+
+    if not confirm == "YES":
+        return "Pull cancelled"
+
+    saves_path = settings["SAVES_DIR"]
+    temp_dir = settings["TEMP_DIR"]
+    source = "/" + branch_name + "/"
+
+    if settings["OAUTH"] == 'null':
+        return "Please type in /login to use this feature"
+
+    println("Starting download... ", gui)
+    println("Do not close the app until 'done downloading' message is shown on the console", gui)
+
+    # clear temp_dir
+    for path_temp in listdir(temp_dir):
+        if path.isdir(path.join(temp_dir, path_temp)):
+            rmtree(path.join(temp_dir, path_temp))
+        else:
+            remove(path.join(temp_dir, path_temp))
+
+    # download zip files
+    dbx = Dropbox(settings["OAUTH"].access_token)
+    for entry in dbx.files_list_folder(source).entries:
+        file = source + entry.name
+        with open(path.join(temp_dir, entry.name), "wb") as f:
+            metadata, res = dbx.files_download(path=file)
+            f.write(res.content)
+            f.close()
+
+    for path_temp in listdir(temp_dir):
+        file = path.join(temp_dir, path_temp)
+        name, extension = path.splitext(file)
+        file_name, ext = path.splitext(path_temp)
+
+        if file_name[0] == symbol and extension == ".zip":
+            with zipfile.ZipFile(file, 'r') as zip_ref:
+                z = path.join(saves_path, file_name)
+                zip_ref.extractall(z)
+
+        remove(file)
+
+    return "done downloading"
+
+
 def push_to_dropbox(branch_name, symbol, gui):
     global settings  # Read
 
@@ -36,7 +111,7 @@ def push_to_dropbox(branch_name, symbol, gui):
     temp_dir = settings["TEMP_DIR"]
 
     if settings["OAUTH"] == 'null':
-        return "Please type in /login to use this app"
+        return "Please type in /login to use this feature"
 
     # clear temp_dir
     for path_temp in listdir(temp_dir):
@@ -61,14 +136,14 @@ def push_to_dropbox(branch_name, symbol, gui):
     except Exception:
         pass
 
-    println(
-        "If you have any large worlds, this process will take some time. Please wait until the console prints 'done'"
-        "to close the app", gui)
+    println("Starting upload... ", gui)
+    println("Do not close the app until 'done uploading' message is shown on the console", gui)
 
     # upload every zip file to dropbox in temp_dir
     for path_temp in listdir(temp_dir):
         zip_file = path.join(temp_dir, path_temp)
         destination = "/" + branch_name + "/" + path_temp
+
         with open(zip_file, "rb") as f:
             file_size = path.getsize(zip_file)
             if file_size < CHUNK_SIZE:
@@ -94,7 +169,7 @@ def push_to_dropbox(branch_name, symbol, gui):
     for path_temp in listdir(temp_dir):
         remove(path.join(temp_dir, path_temp))
 
-    return "done"
+    return "done uploading"
 
 
 def edit_settings():
@@ -184,6 +259,12 @@ def parse_command(command, gui):
             return "To see any visual changes, please restart the app"
 
     elif fp == "/backup" or fp == "backup":
+        if len(params) == 2:
+            if params[1] == "view":
+                print("JIEFIJFIJEIJ")
+            local_backup(params[1], gui)
+        else:
+            local_backup("main", gui)
         return "backup"
 
     elif fp == "/push" or fp == "push":
@@ -195,7 +276,12 @@ def parse_command(command, gui):
             return push_to_dropbox(params[1], params[2], gui)
 
     elif fp == "/pull" or fp == "pull":
-        return "pull"
+        if len(params) == 1:
+            return pull_from_dropbox("main", settings["SYMBOL"], gui)
+        if len(params) == 2:
+            return pull_from_dropbox(params[1], settings["SYMBOL"], gui)
+        if len(params) == 3:
+            return pull_from_dropbox(params[1], params[2], gui)
 
     elif fp == "/login" or fp == "login":
         if not settings["OAUTH"] == 'null':
@@ -320,7 +406,6 @@ def main():
     global settings  # Writes
 
     settings = reload()
-    print(settings)
     gui_elements = create_GUI()
     gui_elements[ROOT].bind("<Return>", lambda event: get_command(gui_elements))
     gui_elements[ROOT].mainloop()

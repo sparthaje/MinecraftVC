@@ -1,4 +1,4 @@
-# Written by Shreepa Parthaje
+# @author: Shreepa Parthaje
 
 import sys
 
@@ -56,12 +56,13 @@ def local_backup(branch_name, gui):
 def pull_from_dropbox(branch_name, symbol, gui):
     global settings  # Read
 
-    confirm = simpledialog.askstring("Confirm",
-                                     "Type in 'YES' if you wish to proceed. This will override existing worlds"
-                                     " if a conflict is found")
+    if settings["CONFIRM"]:
+        confirm = simpledialog.askstring("Confirm",
+                                         "Type in 'YES' if you wish to proceed. This will override existing worlds"
+                                         " if a conflict is found")
 
-    if not confirm == "YES":
-        return "Pull cancelled"
+        if not confirm == "YES":
+            return "Pull cancelled"
 
     saves_path = settings["SAVES_DIR"]
     temp_dir = settings["TEMP_DIR"]
@@ -127,11 +128,12 @@ def push_to_dropbox(branch_name, symbol, gui):
 
     # clear branch_directory in dropbox
     try:
-        confirm = simpledialog.askstring("Confirm",
-                                         "Type in 'YES' if you wish to proceed. This will delete the current '{0}'"
-                                         " branch if it already exists in dropbox".format(branch_name))
-        if not confirm == "YES":
-            return "Action Not "
+        if settings["CONFIRM"]:
+            confirm = simpledialog.askstring("Confirm",
+                                             "Type in 'YES' if you wish to proceed. This will delete the current '{0}'"
+                                             " branch if it already exists in dropbox".format(branch_name))
+            if not confirm == "YES":
+                return "Action Not "
         dbx.files_delete("/" + branch_name)
     except Exception:
         pass
@@ -172,7 +174,7 @@ def push_to_dropbox(branch_name, symbol, gui):
     return "done uploading"
 
 
-def edit_settings():
+def edit_settings(gui):
     global settings  # Read and Write
 
     # FONT
@@ -191,7 +193,7 @@ def edit_settings():
     settings["FONT"] = (family, size, "normal")
 
     # BG_COLOR and TEXT_COLOR
-    for key in ("BG_COLOR", "TEXT_COLOR", "SYMBOL"):
+    for key in ["BG_COLOR", "TEXT_COLOR", "SYMBOL"]:
         color = simpledialog.askstring("{0} (currently: ".format(key) + str(settings[key]) + ")",
                                        "Type in pass to not "
                                        "change this value")
@@ -200,9 +202,27 @@ def edit_settings():
 
         settings[key] = color
 
+    # CONFIRM
+
+    for key in ["CONFIRM"]:
+        key = simpledialog.askstring("{0} (currently: {1})".format(key, str(settings[key])),
+                                     "Type in false to turn {0} off"
+                                     ", type in true to turn {0} on,"
+                                     " or type in pass to not change"
+                                     " this value".format(key))
+        if key == "false":
+            z = False
+        elif key == "true":
+            z = True
+        else:
+            z = settings[key]
+
+        settings[key] = z
+
     # BACKUP_DIR and SAVES_DIR
 
-    for key in ("BACKUP_DIR", "SAVES_DIR", "TEMP_DIR"):
+    for key in ["BACKUP_DIR", "SAVES_DIR", "TEMP_DIR"]:
+        println("Choose {0}, Click cancel to keep previous {0} (".format(key) + settings[key] + ")", gui)
         backup_dir = str(filedialog.askdirectory(
             title="Choose {0}, Click cancel to keep previous {0} (".format(key) + settings[key] + ")"))
         if not (backup_dir == "" or backup_dir == "()"):
@@ -255,7 +275,7 @@ def parse_command(command, gui):
             view_settings(gui)
             return ""
         elif params[1] == "edit":
-            edit_settings()
+            edit_settings(gui)
             return "To see any visual changes, please restart the app"
 
     elif fp == "/backup" or fp == "backup":
@@ -304,8 +324,7 @@ def parse_command(command, gui):
         gui[CONSOLE].config(state=DISABLED)
         return ""
 
-    else:
-        return "'{0}' is not a valid command, type /help for help".format(command)
+    return "'{0}' is not a valid command, type /help for help".format(command)
 
 
 def println(item, gui):
@@ -396,7 +415,8 @@ def reload():
             "SAVES_DIR": "null",
             "TEMP_DIR": "null",
             "SYMBOL": "*",
-            "OAUTH": "null"
+            "OAUTH": "null",
+            "CONFIRM": True
         }
         save(s)
         return s

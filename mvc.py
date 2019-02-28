@@ -268,6 +268,22 @@ def login():
     return "Logged In"
 
 
+def backup_list():
+    global settings  # Read
+
+    s = "\n------------------------------------------------\n"
+    for branch in listdir(settings["BACKUP_DIR"]):
+        if branch == '.DS_Store':
+            continue
+        s += f"  {branch}\n"
+        p = path.join(settings["BACKUP_DIR"], branch)
+        if path.isdir(p):
+            for file in listdir(p):
+                s += f"\t{file}\n"
+    s += "\n------------------------------------------------\n"
+    return s
+
+
 def parse_command(command, gui):
     global settings  # Read
 
@@ -282,12 +298,12 @@ def parse_command(command, gui):
             return "To see any visual changes, please restart the app"
 
     # TODO: load backups
+    # TODO: option to remove old backups
     elif fp == "/backup" or fp == "backup":
         if len(params) == 2:
-            if params[1] == "view":
-                # TODO: backup view
-                print("JIEFIJFIJEIJ")
-                return "A View?"
+            if params[1] == "list":
+                return backup_list()
+
             local_backup(params[1], gui)
         else:
             local_backup("main", gui)

@@ -46,11 +46,10 @@ def local_backup(branch_name, gui):
     hour = now.hour
     minute = now.minute
 
-    backup_name = str(month) + " " + str(day) + " " + str(year) + " | " + str(hour) + ":" + str(minute) + " |"
-
+    backup_name = f"{month}-{day}-{year}_{hour}-{minute}"
     base = path.join(backup_dir, branch_name)
 
-    make_archive(path.join(base, "{0} saves".format(backup_name)), 'zip', saves_path)
+    make_archive(path.join(base, backup_name), 'zip', saves_path)
 
 
 def pull_from_dropbox(branch_name, symbol, gui):
@@ -278,10 +277,40 @@ def backup_list():
         s += f"  {branch}\n"
         p = path.join(settings["BACKUP_DIR"], branch)
         if path.isdir(p):
-            for file in listdir(p):
+            files = listdir(p)
+            files.sort()
+            for file in files:
+                if file == '.DS_Store':
+                    continue
                 s += f"\t{file}\n"
     s += "\n------------------------------------------------\n"
     return s
+
+
+def remove_old_backups():
+    global settings  # Read
+
+    for branch in listdir(settings["BACKUP_DIR"]):
+        if branch == '.DS_Store':
+            continue
+        p = path.join(settings["BACKUP_DIR"], branch)
+        if path.isdir(p):
+            files = listdir(p)
+            files.sort()
+            to_remove = len(files) - 5
+            for i in range(to_remove):
+                remove(path.join(p, files[i]))
+
+
+def load_backup(branch, name):
+    global settings  # Read
+
+    backup = path.join(settings["BACKUP_DIR"], branch, name)
+    destination = settings["SAVES_DIR"]
+    with zipfile.ZipFile(backup, 'r') as zip_ref:
+        zip_ref.extractall(destination)
+
+    return f"Loaded {branch}/{name}"
 
 
 def parse_command(command, gui):
@@ -297,12 +326,17 @@ def parse_command(command, gui):
             edit_settings(gui)
             return "To see any visual changes, please restart the app"
 
-    # TODO: load backups
-    # TODO: option to remove old backups
     elif fp == "/backup" or fp == "backup":
-        if len(params) == 2:
+        if len(params) >= 2:
             if params[1] == "list":
                 return backup_list()
+            if params[1] == "remove":
+                remove_old_backups()
+                return "Removed old backups"
+            if params[1] == "load":
+                branch_name = params[2]
+                file_name = params[3]
+                return load_backup(branch_name, file_name)
 
             local_backup(params[1], gui)
         else:

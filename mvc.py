@@ -25,8 +25,8 @@ from dropbox import files
 
 # ------------- CONSTANTS -------------
 ROOT, CONSOLE, ENTRY = 0, 1, 2
-APP_KEY = open("secret.txt", "r").read().split()[0]
-APP_SECRET = open("secret.txt", "r").read().split()[1]
+APP_KEY = "8tt1o971kwqwpsk"
+APP_SECRET = "fh7iojep90hw60z"
 CHUNK_SIZE = 4 * 1024 * 1024
 
 # ------------- GLOBALS -------------
@@ -102,7 +102,9 @@ def pull_from_dropbox(branch_name, symbol, gui):
 
         remove(file)
 
-    return "done downloading"
+    save(settings)
+
+    return "Done Downloading"
 
 
 def push_to_dropbox(branch_name, symbol, gui):
@@ -171,7 +173,9 @@ def push_to_dropbox(branch_name, symbol, gui):
     for path_temp in listdir(temp_dir):
         remove(path.join(temp_dir, path_temp))
 
-    return "done uploading"
+    save(settings)
+
+    return "Done Uploading"
 
 
 def edit_settings(gui):
@@ -203,21 +207,20 @@ def edit_settings(gui):
         settings[key] = color
 
     # CONFIRM
-
     for key in ["CONFIRM"]:
-        key = simpledialog.askstring("{0} (currently: {1})".format(key, str(settings[key])),
+        ans = simpledialog.askstring("{0} (currently: {1})".format(key, str(settings[key])),
                                      "Type in false to turn {0} off"
                                      ", type in true to turn {0} on,"
                                      " or type in pass to not change"
                                      " this value".format(key))
-        if key == "false":
-            z = False
-        elif key == "true":
-            z = True
+        if ans == "false":
+            value = False
+        elif ans == "true":
+            value = True
         else:
-            z = settings[key]
+            value = settings[key]
 
-        settings[key] = z
+        settings[key] = value
 
     # BACKUP_DIR and SAVES_DIR
 
@@ -278,14 +281,17 @@ def parse_command(command, gui):
             edit_settings(gui)
             return "To see any visual changes, please restart the app"
 
+    # TODO: load backups
     elif fp == "/backup" or fp == "backup":
         if len(params) == 2:
             if params[1] == "view":
+                # TODO: backup view
                 print("JIEFIJFIJEIJ")
+                return "A View?"
             local_backup(params[1], gui)
         else:
             local_backup("main", gui)
-        return "backup"
+        return "Backup Complete"
 
     elif fp == "/push" or fp == "push":
         if len(params) == 1:
@@ -362,18 +368,18 @@ def create_GUI():
 
     gui = []
     root = tk.Tk()
-    root.minsize(1200, 300)
+    root.minsize(900, 300)
     root.resizable(0, 0)
     root.title("MinecraftVC")
     root.configure(background='black')
 
-    console = Text(root, width=126, height=17, bd=0, highlightthickness=0, relief='ridge', bg=bg_color,
+    console = Text(root, width=115, height=25, bd=0, highlightthickness=0, relief='ridge', bg=bg_color,
                    foreground=txt_color, font=font)
     console.pack()
     console.insert(END, "Welcome to MinecraftVC")
     console.config(state=DISABLED)
 
-    entry = Entry(root, width=126, bd=0, highlightthickness=0, relief='ridge', bg=bg_color, foreground=txt_color,
+    entry = Entry(root, width=115, bd=0, highlightthickness=0, relief='ridge', bg=bg_color, foreground=txt_color,
                   insertbackground=txt_color, font=font)
     entry.focus()
     entry.pack()

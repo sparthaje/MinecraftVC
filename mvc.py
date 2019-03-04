@@ -25,8 +25,8 @@ from dropbox import files
 
 # ------------- CONSTANTS -------------
 ROOT, CONSOLE, ENTRY = 0, 1, 2
-APP_KEY = "8tt1o971kwqwpsk"
-APP_SECRET = "fh7iojep90hw60z"
+APP_KEY = ""
+APP_SECRET = ""
 CHUNK_SIZE = 4 * 1024 * 1024
 
 # ------------- GLOBALS -------------
